@@ -1,12 +1,12 @@
-;;; markless.el --- Major mode for Markless documents
+;;; markless.el --- Major mode for Markless documents -*- lexical-binding: t; -*-
 
 ;; Copyright (c) 2019 Nicolas Hafner
 ;;
 ;; Author: Nicolas Hafner <shinmera@tymoon.eu>
 ;; URL: http://github.com/shirakumo/markless.el/
-;; Package-Requires: ((emacs "24.3"))
+;; Package-Requires: ((emacs "24.4"))
 ;; Version: 1.0
-;; Keywords: Markless, markup, major-mode, language
+;; Keywords: languages, wp
 
 ;; This file is not part of GNU Emacs.
 
@@ -23,7 +23,9 @@
 ;;   https://shirakumo.github.io/markless
 ;;
 ;; This does *not* implement a full Markless parser
-;; that is compliant with the specification.
+;; that is compliant with the specification.  It uses
+;; a simplified grammar that should be adequate for
+;; syntax highlighting.
 
 ;;; Code:
 
@@ -33,7 +35,9 @@
 (defvar flyspell-generic-check-word-predicate)
 
 (defgroup markless nil
-  "Markless settings")
+  "Markless settings"
+  :group 'text
+  :link '(url-link "https://github.com/shirakumo/markless.el"))
 
 (defgroup markless-faces nil
   "Faces used in Markless mode"
