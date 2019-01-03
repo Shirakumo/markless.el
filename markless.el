@@ -1,3 +1,32 @@
+;;; markless.el --- Major mode for Markless documents
+
+;; Copyright (c) 2019 Nicolas Hafner
+;;
+;; Author: Nicolas Hafner <shinmera@tymoon.eu>
+;; URL: http://github.com/shirakumo/markless.el/
+;; Package-Requires: ((emacs "24.3"))
+;; Version: 1.0
+;; Keywords: Markless, markup, major-mode, language
+
+;; This file is not part of GNU Emacs.
+
+;;; License:
+;; Licensed under the Artistic License 2.0
+
+;;; Commentary:
+;;
+;; This package implements a major mode for Markless
+;; documents.  Markless is a new document markup
+;; standard.  You can find the Markless standard at
+;;
+;;   https://github.com/shirakumo/Markless
+;;   https://shirakumo.github.io/markless
+;;
+;; This does *not* implement a full Markless parser
+;; that is compliant with the specification.
+
+;;; Code:
+
 (require 'font-lock)
 (require 'cl-lib)
 
@@ -12,6 +41,8 @@
   :group 'faces)
 
 (defmacro --markless-defface (name prop &optional doc)
+  "Shorthand to define faces.
+NAME PROP DOC, shut up, checkdoc."
   `(defface ,name
        '((t ,prop))
      ,(or doc "")
@@ -38,20 +69,29 @@
 (--markless-defface markless-highlight-face (:inherit highlight))
 
 (defun markless-mark (start end prop)
+  "Shorthand to mark up a text between START and END with PROP."
   (if (or (symbolp prop) (keywordp (first prop)))
       (add-face-text-property start end prop)
       (add-text-properties start end prop))))
 
 (defun markless-match (string)
+  "Attempt to match STRING.  If successful, return t.
+
+This does not alter the point."
   (when (< (+ (point) (length string)) (point-max))
     (cl-loop for i from (point)
              for char across string
              always (= char (char-after i)))))
 
 (defun markless-num-p (point)
+  "Return t if the char at POINT is a numeric char."
   (<= ?0 (char-after point) ?9))
 
 (defun markless-inline-directive (pre post prop)
+  "Process the inline directive recursively.
+
+If PRE matches, recurses until POST is found.
+Marks PRE and POST as markup and the content with PROP."
   (when (markless-match pre)
     (let ((start (point)))
       (forward-char (length pre))
@@ -65,6 +105,7 @@
       t)))
 
 (defun markless-parse-option (option)
+  "Parse the compound OPTION to a face."
   (cond ((string= option "bold") 'markless-bold-face)
         ((string= option "italic") 'markless-italic-face)
         ((string= option "underline") 'markless-underline-face)
@@ -99,11 +140,13 @@
         ((string= option "gigantic") `(:height 4.0))))
 
 (defun markless-compute-options-faces (options)
+  "Parse the list of compound OPTIONS to a list of faces."
   (cl-loop for option in options
            for face = (markless-parse-option option)
            when face collect face))
 
 (defun markless-match-inline (&optional end)
+  "Markup inline directives until the END is matched or until the end of line is found."
   (cl-loop
    (or (when (= (point) (point-at-eol))
          (return nil))
@@ -130,6 +173,7 @@
        (forward-char))))
 
 (defun markless-match-block ()
+  "Markup block directives until the end of the line or `point-max'."
   (cl-loop while (and (< (point) (point-max)) (= ?  (char-after (point))))
            do (forward-char))
   (cond ((markless-match "#")
@@ -198,15 +242,18 @@
          (markless-match-inline))))
 
 (defun markless-fontify (end)
+  "Generate markup for Markless until END."
   (cl-loop while (< (point) end)
            do (markless-match-block)
            (when (< (point) end)
              (forward-char))))
 
-(defconst markless-url-regex "[[:alpha:]][[:alnum:]+\\-.]*://[[:alnum:]$\\-_.+!*'()&,/:;=?@%#\\\\]+")
+(defconst markless-url-regex "[[:alpha:]][[:alnum:]+\\-.]*://[[:alnum:]$\\-_.+!*'()&,/:;=?@%#\\\\]+"
+  "Regex to match URLs as specified by Markless.")
 
-(defun markless-fontify-url (last)
-  (when (re-search-forward markless-url-regex last t)
+(defun markless-fontify-url (end)
+  "Markup URLs until the END."
+  (when (re-search-forward markless-url-regex end t)
     (goto-char (1+ (match-end 0)))
     (let ((props `(keymap ,markless-mode-mouse-map
                           face markless-url-face
@@ -217,6 +264,7 @@
       t)))
 
 (defun markless-follow-link-at-point ()
+  "Follow the URL at the current point, if any."
   (interactive)
   (if (thing-at-point-looking-at markless-url-regex)
       (let* ((url (message (match-string 0)))
@@ -228,6 +276,7 @@
       (user-error "Point is not at a link or URL")))
 
 (defun markless-at-word-p ()
+  "Return t if the current point is a word that should be spell-checked."
   (not (let ((faces (get-text-property (point) 'face)))
          (unless (listp faces) (setq faces (list faces)))
          (or (memq 'markless-url-face faces)
@@ -238,16 +287,19 @@
 
 (defvar markless-mode-map
   (let ((map (make-keymap)))
-    map))
+    map)
+  "Keymap for the Markless mode.")
 
 (defvar markless-mode-mouse-map
   (let ((map (make-sparse-keymap)))
     (define-key map [follow-link] 'mouse-face)
     (define-key map [mouse-2] 'markless-follow-link-at-point)
-    map))
+    map)
+  "Keymap for mouse interactions in Markless mode.")
 
 (defvar markless-font-lock-keywords '((markless-fontify-url)
-                                      (markless-fontify)))
+                                      (markless-fontify))
+  "Font lock keywords for Markless mode.")
 
 (define-derived-mode markless-mode text-mode "Markless"
   "Major mode for Markless documents."
@@ -259,3 +311,5 @@
 (add-to-list 'auto-mode-alist '("\\.mess" . markless-mode))
 
 (provide 'markless)
+
+;;; markless.el ends here
