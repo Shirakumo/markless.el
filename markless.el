@@ -1,4 +1,5 @@
 (require 'font-lock)
+(require 'cl-lib)
 
 (defvar flyspell-generic-check-word-predicate)
 
@@ -16,88 +17,183 @@
      ,(or doc "")
      :group 'markless-faces))
 
+(--markless-defface markless-markup-face (:inherit shadow))
 (--markless-defface markless-italic-face (:inherit italic))
 (--markless-defface markless-bold-face (:inherit bold))
 (--markless-defface markless-underline-face (:underline t))
 (--markless-defface markless-strikethrough-face (:strike-through t))
 (--markless-defface markless-literal-face (:inherit (fixed-pitch font-lock-constant-face)))
-(--markless-defface markless-keyword-face (:inherit font-lock-type-face))
 (--markless-defface markless-url-face (:inherit link))
-(--markless-defface markless-comment-face (:inherit font-lock-comment-face))
+(--markless-defface markless-spoiler-face (:background "black" :foreground "black"))
+(--markless-defface markless-quote-source-face (:inherit font-lock-variable-name-face))
+(--markless-defface markless-quote-face (:inherit font-lock-doc-face))
+(--markless-defface markless-instruction-face (:inherit font-lock-function-name-face))
+(--markless-defface markless-keyword-face (:inherit font-lock-type-face))
 (--markless-defface markless-warning-face (:inherit font-lock-warning-face))
 (--markless-defface markless-error-face (:inherit font-lock-warning-face))
-(--markless-defface markless-instruction-face (:inherit font-lock-function-name-face))
-(--markless-defface markless-embed-face (:inherit shadow :slant normal :weight normal))
+(--markless-defface markless-comment-face (:inherit font-lock-comment-face))
+(--markless-defface markless-embed-face (:inherit font-lock-type-face))
+(--markless-defface markless-list-mark-face (:inherit markless-markup-face))
+(--markless-defface markless-footnote-face (:inherit markless-quote-face))
 (--markless-defface markless-highlight-face (:inherit highlight))
-(--markless-defface markless-markup-face (:inherit shadow))
+
+(defun markless-mark (start end prop)
+  (if (or (symbolp prop) (keywordp (first prop)))
+      (add-face-text-property start end prop)
+      (add-text-properties start end prop))))
+
+(defun markless-match (string)
+  (when (< (+ (point) (length string)) (point-max))
+    (cl-loop for i from (point)
+             for char across string
+             always (= char (char-after i)))))
+
+(defun markless-num-p (point)
+  (<= ?0 (char-after point) ?9))
+
+(defun markless-inline-directive (pre post prop)
+  (when (markless-match pre)
+    (let ((start (point)))
+      (forward-char (length pre))
+      (markless-mark start (point) 'markless-markup-face)
+      (cond ((markless-match-inline post)
+             (markless-mark (point) (+ (point) (length post)) 'markless-markup-face)
+             (markless-mark (+ start (length pre)) (point) prop)
+             (forward-char (length post)))
+            (t
+             (markless-mark (+ start (length pre)) (point) prop)))
+      t)))
+
+(defun markless-parse-option (option)
+  (cond ((string= option "bold") 'markless-bold-face)
+        ((string= option "italic") 'markless-italic-face)
+        ((string= option "underline") 'markless-underline-face)
+        ((string= option "strikethrough") 'markless-strikethrough-face)
+        ((string= option "spoiler") 'markless-spoiler-face)
+        ((string-prefix-p "font" option)
+         `(:family ,(subseq option 5)))
+        ((string-prefix-p "color" option)
+         (if (= ?# (aref option 6))
+             `(:foreground ,(subseq option 6))
+             (let ((rgb (mapcar #'string-to-number
+                                (split-string (subseq option 6) " +"))))
+               `(:foreground ,(apply 'format "#%02x%02x%02x" rgb)))))
+        ((string-prefix-p "size" option)
+         `(:height))
+        ((or (string-prefix-p "link" option)
+             (string-match markless-url-regex option))
+         'markless-url-face)
+        ((color-defined-p option)
+         `(:foreground ,option))))
+
+(defun markless-compute-options-faces (options)
+  (cl-loop for option in options
+           for face = (markless-parse-option option)
+           when face collect face))
+
+(defun markless-match-inline (&optional end)
+  (cl-loop
+   (or (when (= (point) (point-at-eol))
+         (return nil))
+       (when (and end (markless-match end))
+         (return t))
+       (markless-inline-directive "**" "**" 'markless-bold-face)
+       (markless-inline-directive "//" "//" 'markless-italic-face)
+       (markless-inline-directive "__" "__" 'markless-underline-face)
+       (markless-inline-directive "``" "``" 'markless-literal-face)
+       (markless-inline-directive "<-" "->" 'markless-strikethrough-face)
+       (markless-inline-directive "v(" ")" '(display ((raise -0.2) (height 0.8))))
+       (markless-inline-directive "^(" ")" '(display ((raise +0.2) (height 0.8))))
+       (when (markless-match "\"")
+         (let ((start (point)))
+           (forward-char)
+           (when (markless-match-inline "\"(")
+             (markless-mark start (1+ start) 'markless-markup-face)
+             (let ((end (point)))
+               (re-search-forward ")" (point-at-eol) t)
+               (markless-mark end (point) 'markless-markup-face)
+               (let ((options (split-string (buffer-substring (+ end 2) (1- (point))) ", *")))
+                 (dolist (face (markless-compute-options-faces options))
+                   (markless-mark (1+ start) end face)))))))
+       (forward-char))))
+
+(defun markless-match-block ()
+  (cl-loop while (and (< (point) (point-max)) (= ?  (char-after (point))))
+           do (forward-char))
+  (cond ((or (markless-match "# ")
+             (markless-match "##")))
+        ((markless-match "~ ")
+         (add-face-text-property (point) (+ 2 (point)) 'markless-quote-source-face)
+         (forward-char 2)
+         (markless-match-inline))
+        ((markless-match "| ")
+         (add-face-text-property (point) (point-at-eol) 'markless-quote-face)
+         (forward-char 2)
+         (markless-match-block))
+        ((markless-match "[ ")
+         (let ((start (point)))
+           (move-end-of-line 1)
+           (add-face-text-property start (point) 'markless-embed-face)))
+        ((markless-match "! ")
+         (let ((start (point)))
+           (move-end-of-line 1)
+           (add-face-text-property start (point) 'markless-instruction-face)))
+        ((markless-match "; ")
+         (let ((start (point)))
+           (move-end-of-line 1)
+           (add-face-text-property start (point) 'markless-comment-face)))
+        ((markless-match "::")
+         )
+        ((and (markless-match "[") (markless-num-p (1+ (point))))
+         (let ((start (point)))
+           (forward-char)
+           (cl-loop while (and (< (point) (point-max)) (markless-num-p (point)))
+                    do (forward-char))
+           (cond ((= ?\] (char-after (point)))
+                  (forward-char)
+                  (add-face-text-property start (point-at-eol) 'markless-footnote-face)
+                  (markless-match-inline))
+                 (t
+                  (goto-char start)
+                  (markless-match-inline)))))
+        ((markless-match "- ")
+         (add-face-text-property (point) (+ 2 (point)) 'markless-list-mark-face)
+         (forward-char 2)
+         (markless-match-block))
+        ((markless-num-p (point))
+         (let ((start (point)))
+           (cl-loop while (and (< (point) (point-max)) (markless-num-p (point)))
+                    do (forward-char))
+           (cond ((= ?. (char-after (point)))
+                  (forward-char)
+                  (add-face-text-property start (point) 'markless-list-mark-face)
+                  (markless-match-block))
+                 (t
+                  (goto-char start)
+                  (markless-match-inline)))))
+        (t
+         (markless-match-inline))))
+
+(defun markless-fontify (end)
+  (cl-loop while (< (point) end)
+           do (markless-match-block)
+           (when (< (point) end)
+             (forward-char))))
 
 (defconst markless-url-regex "[[:alpha:]][[:alnum:]+\\-.]*://[[:alnum:]$\\-_.+!*'()&,/:;=?@%#\\\\]+")
-
-(defun markless-at-block-p (point)
-  )
 
 (defun markless-fontify-url (last)
   (when (re-search-forward markless-url-regex last t)
     (goto-char (1+ (match-end 0)))
     (let* ((start (match-beginning 0))
            (end (match-end 0))
-           (props (list 'keymap markless-mode-mouse-map
-                        'face 'markless-url-face
-                        'mouse-face 'markless-highlight-face
-                        'rear-nonsticky t
-                        'font-lock-multiline t)))
+           (props `(keymap ,markless-mode-mouse-map
+                           face markless-url-face
+                           mouse-face markless-highlight-face
+                           rear-nonsticky t
+                           font-lock-multiline t)))
       (add-text-properties start end props)
       t)))
-
-(defun markless-fontify-sup/sub (last)
-  (when (re-search-forward "[v^](.*?)" last t)
-    (let* ((start (match-beginning 0))
-           (end (match-end 0))
-           (props `(display ((raise ,(if (eql ?v (char-after start)) -0.2 +0.2)) (height 0.8)))))
-      (add-face-text-property start (+ start 2) 'markless-markup-face)
-      (add-face-text-property (- end 1) end 'markless-markup-face)
-      (add-text-properties (+ start 2) (- end 1) props)
-      t)))
-
-(defun markless-fontify-compound (last))
-
-(setq markless-font-lock-keywords
-      `(("\\(//\\)\\(.*?\\)\\(//\\)"
-         (1 'markless-markup-face prepend)
-         (2 'markless-italic-face append)
-         (3 'markless-markup-face prepend))
-        ("\\(\\*\\*\\)\\(.*?\\)\\(\\*\\*\\)"
-         (1 'markless-markup-face prepend)
-         (2 'markless-bold-face append)
-         (3 'markless-markup-face prepend))
-        ("\\(__\\)\\(.*?\\)\\(__\\)"
-         (1 'markless-markup-face prepend)
-         (2 'markless-underline-face append)
-         (3 'markless-markup-face prepend))
-        ("\\(<-\\)\\(.*?\\)\\(->\\)"
-         (1 'markless-markup-face prepend)
-         (2 'markless-strikethrough-face append)
-         (3 'markless-markup-face prepend))
-        ("\\(``\\)\\(.*?\\)\\(``\\)"
-         (1 'markless-markup-face prepend)
-         (2 'markless-literal-face append)
-         (3 'markless-markup-face prepend))
-        (markless-fontify-sup/sub)
-        (markless-fontify-url)
-        (markless-fontify-compound)))
-
-(defun markless-syntactic-face (state)
-  (let ((in-comment (nth 4 state)))
-    (cond
-      (in-comment 'markless-comment-face)
-      (t nil))))
-
-(defun markless-at-word-p ()
-  (not (let ((faces (get-text-property (point) 'face)))
-         (unless (listp faces) (setq faces (list faces)))
-         (or (memq 'markless-url-face faces)
-             (memq 'markless-literal-face faces)
-             (memq 'markless-keyword-face faces)))))
 
 (defun markless-follow-link-at-point ()
   (interactive)
@@ -110,7 +206,14 @@
               (when (and file (< 0 (length file))) (find-file file)))))
       (user-error "Point is not at a link or URL")))
 
-(defvar markless-mode-hook nil)
+(defun markless-at-word-p ()
+  (not (let ((faces (get-text-property (point) 'face)))
+         (unless (listp faces) (setq faces (list faces)))
+         (or (memq 'markless-url-face faces)
+             (memq 'markless-literal-face faces)
+             (memq 'markless-keyword-face faces)
+             (memq 'markless-embed-face faces)
+             (memq 'markless-markup-face faces)))))
 
 (defvar markless-mode-map
   (let ((map (make-keymap)))
@@ -122,13 +225,12 @@
     (define-key map [mouse-2] 'markless-follow-link-at-point)
     map))
 
+(defvar markless-font-lock-keywords '((markless-fontify-url)
+                                      (markless-fontify)))
+
 (define-derived-mode markless-mode text-mode "Markless"
   "Major mode for Markless documents."
-  (setq font-lock-defaults
-        '(markless-font-lock-keywords
-          nil nil nil nil
-          (font-lock-multiline . t)))
-
+  (setq font-lock-defaults '(markless-font-lock-keywords))
   (setq-local flyspell-generic-check-word-predicate
               #'markless-at-word-p))
 
