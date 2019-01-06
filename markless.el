@@ -31,8 +31,25 @@
 
 (require 'font-lock)
 (require 'cl-lib)
+(require 'url-parse)
+(require 'thingatpt)
 
 (defvar flyspell-generic-check-word-predicate)
+
+(defconst markless-url-regex "[[:alpha:]][[:alnum:]+\\-.]*://[[:alnum:]$\\-_.+!*'()&,/:;=?@%#\\\\]+"
+  "Regex to match URLs as specified by Markless.")
+
+(defvar markless-mode-map
+  (let ((map (make-keymap)))
+    map)
+  "Keymap for the Markless mode.")
+
+(defvar markless-mode-mouse-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map [follow-link] 'mouse-face)
+    (define-key map [mouse-2] 'markless-follow-link-at-point)
+    map)
+  "Keymap for mouse interactions in Markless mode.")
 
 (defgroup markless nil
   "Markless settings"
@@ -44,7 +61,7 @@
   :group 'markless
   :group 'faces)
 
-(defmacro --markless-defface (name prop &optional doc)
+(defmacro markless--defface (name prop &optional doc)
   "Shorthand to define faces.
 NAME PROP DOC, shut up, checkdoc."
   `(defface ,name
@@ -52,29 +69,29 @@ NAME PROP DOC, shut up, checkdoc."
      ,(or doc "")
      :group 'markless-faces))
 
-(--markless-defface markless-markup-face (:inherit shadow))
-(--markless-defface markless-italic-face (:inherit italic))
-(--markless-defface markless-bold-face (:inherit bold))
-(--markless-defface markless-underline-face (:underline t))
-(--markless-defface markless-strikethrough-face (:strike-through t))
-(--markless-defface markless-literal-face (:inherit (font-lock-constant-face fixed-pitch)))
-(--markless-defface markless-url-face (:inherit link))
-(--markless-defface markless-spoiler-face (:background "black" :foreground "black"))
-(--markless-defface markless-quote-source-face (:inherit font-lock-variable-name-face))
-(--markless-defface markless-quote-face (:inherit font-lock-doc-face))
-(--markless-defface markless-instruction-face (:inherit font-lock-function-name-face))
-(--markless-defface markless-keyword-face (:inherit font-lock-type-face))
-(--markless-defface markless-warning-face (:inherit font-lock-warning-face))
-(--markless-defface markless-error-face (:inherit font-lock-warning-face))
-(--markless-defface markless-comment-face (:inherit font-lock-comment-face))
-(--markless-defface markless-embed-face (:inherit font-lock-type-face))
-(--markless-defface markless-list-mark-face (:inherit markless-markup-face))
-(--markless-defface markless-footnote-face (:inherit markless-quote-face))
-(--markless-defface markless-highlight-face (:inherit highlight))
+(markless--defface markless-markup-face (:inherit shadow))
+(markless--defface markless-italic-face (:inherit italic))
+(markless--defface markless-bold-face (:inherit bold))
+(markless--defface markless-underline-face (:underline t))
+(markless--defface markless-strikethrough-face (:strike-through t))
+(markless--defface markless-literal-face (:inherit (font-lock-constant-face fixed-pitch)))
+(markless--defface markless-url-face (:inherit link))
+(markless--defface markless-spoiler-face (:background "black" :foreground "black"))
+(markless--defface markless-quote-source-face (:inherit font-lock-variable-name-face))
+(markless--defface markless-quote-face (:inherit font-lock-doc-face))
+(markless--defface markless-instruction-face (:inherit font-lock-function-name-face))
+(markless--defface markless-keyword-face (:inherit font-lock-type-face))
+(markless--defface markless-warning-face (:inherit font-lock-warning-face))
+(markless--defface markless-error-face (:inherit font-lock-warning-face))
+(markless--defface markless-comment-face (:inherit font-lock-comment-face))
+(markless--defface markless-embed-face (:inherit font-lock-type-face))
+(markless--defface markless-list-mark-face (:inherit markless-markup-face))
+(markless--defface markless-footnote-face (:inherit markless-quote-face))
+(markless--defface markless-highlight-face (:inherit highlight))
 
 (cl-defun markless-mark (start end prop)
   "Shorthand to mark up a text between START and END with PROP."
-  (if (or (symbolp prop) (keywordp (first prop)))
+  (if (or (symbolp prop) (keywordp (car prop)))
       (add-face-text-property start end prop)
       (add-text-properties start end prop)))
 
@@ -130,16 +147,16 @@ Marks PRE and POST as markup and the content with PROP."
         ((string= option "gigantic") `(:height 4.0))
         ;; Complex options
         ((string-prefix-p "font" option)
-         `(:family ,(subseq option 5)))
+         `(:family ,(cl-subseq option 5)))
         ((string-prefix-p "color" option)
          (if (= ?# (aref option 6))
-             `(:foreground ,(subseq option 6))
+             `(:foreground ,(cl-subseq option 6))
              (let ((rgb (mapcar #'string-to-number
-                                (split-string (subseq option 6) " +"))))
+                                (split-string (cl-subseq option 6) " +"))))
                `(:foreground ,(apply 'format "#%02x%02x%02x" rgb)))))
         ((string-prefix-p "size" option)
-         (let ((size (subseq option 5 (- (length option) 2)))
-               (unit (subseq option (- (length option) 2))))
+         (let ((size (cl-subseq option 5 (- (length option) 2)))
+               (unit (cl-subseq option (- (length option) 2))))
            (if (string= unit "em")
                `(:height ,(float (string-to-number size)))
                `(:height ,(round (* 10 (string-to-number size)))))))
@@ -157,9 +174,9 @@ Marks PRE and POST as markup and the content with PROP."
   "Markup inline directives until the END is matched or until the end of line is found."
   (cl-loop
    (or (when (= (point) (point-at-eol))
-         (return-from markless-match-inline nil))
+         (cl-return-from markless-match-inline nil))
        (when (and end (markless-match end))
-         (return-from markless-match-inline t))
+         (cl-return-from markless-match-inline t))
        (markless-inline-directive "**" "**" 'markless-bold-face)
        (markless-inline-directive "//" "//" 'markless-italic-face)
        (markless-inline-directive "__" "__" 'markless-underline-face)
@@ -213,7 +230,7 @@ Marks PRE and POST as markup and the content with PROP."
   (when (markless-in-code-block-p)
     (markless-mark (point) (point-at-eol) 'markless-literal-face)
     (move-end-of-line 1)
-    (return-from markless-match-block))
+    (cl-return-from markless-match-block))
   (cl-loop while (and (< (point) end) (= ?  (char-after (point))))
            do (forward-char))
   (cond ((markless-match "#")
@@ -293,9 +310,6 @@ Marks PRE and POST as markup and the content with PROP."
            (when (< (point) end)
              (forward-char))))
 
-(defconst markless-url-regex "[[:alpha:]][[:alnum:]+\\-.]*://[[:alnum:]$\\-_.+!*'()&,/:;=?@%#\\\\]+"
-  "Regex to match URLs as specified by Markless.")
-
 (cl-defun markless-fontify-url (end)
   "Markup URLs until the END."
   (when (re-search-forward markless-url-regex end t)
@@ -329,18 +343,6 @@ Marks PRE and POST as markup and the content with PROP."
              (memq 'markless-keyword-face faces)
              (memq 'markless-embed-face faces)
              (memq 'markless-markup-face faces)))))
-
-(defvar markless-mode-map
-  (let ((map (make-keymap)))
-    map)
-  "Keymap for the Markless mode.")
-
-(defvar markless-mode-mouse-map
-  (let ((map (make-sparse-keymap)))
-    (define-key map [follow-link] 'mouse-face)
-    (define-key map [mouse-2] 'markless-follow-link-at-point)
-    map)
-  "Keymap for mouse interactions in Markless mode.")
 
 (defvar markless-font-lock-keywords '((markless-fontify-url)
                                       (markless-fontify))
