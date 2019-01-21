@@ -355,7 +355,9 @@ Marks PRE and POST as markup and the content with PROP."
                              nil nil nil nil
                              (font-lock-multiline . t)))
   (setq-local flyspell-generic-check-word-predicate
-              #'markless-at-word-p))
+              #'markless-at-word-p)
+  (setq-local comment-start ";")
+  (setq-local comment-start-skip ";+ "))
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.mess" . markless-mode))
