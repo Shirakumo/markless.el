@@ -357,7 +357,31 @@ Marks PRE and POST as markup and the content with PROP."
   (setq-local flyspell-generic-check-word-predicate
               #'markless-at-word-p)
   (setq-local comment-start ";")
-  (setq-local comment-start-skip ";+ "))
+  (setq-local comment-start-skip ";+ ")
+  (setq-local paragraph-start
+              (mapconcat #'identity
+                         '(
+                           "\f" ; linefeed
+                           "[ \t\f]*$" ; whitespace-only line
+                           "[ \t]*\|[ \t\f]*$" ; empty blockquote line
+                           "[ \t]*-[ \t]+" ; unordered list item
+                           "[ \t]*[0-9]+\\.[ \t]+" ; ordered list item
+                           "\\[[0-9]+\\]" ; footnote
+                           )
+                         "\\|"))
+  (setq-local paragraph-separate
+              (mapconcat #'identity
+                         '(
+                           "\\([ \t]*\\|| \\)+~[ \t]*" ; blockquote header
+                           "\\([ \t]*\\|| \\)+$" ; empty (blockquote) line
+                           "\\([ \t]*\\|| \\)+#+" ; heading
+                           "\\([ \t]*\\|| \\)+! " ; instruction
+                           "\\([ \t]*\\|| \\)+;+ " ; comment
+                           "\\([ \t]*\\|| \\)+\\[ " ; embed
+                           "\\([ \t]*\\|| \\)+==+" ; horizontal rule
+                           "\\([ \t]*\\|| \\)+[\d+] " ; footnote
+                           )
+                         "\\|")))
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.mess" . markless-mode))
