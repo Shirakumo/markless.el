@@ -1,0 +1,5 @@
+[ image http://melpa.org/packages/markless-badge.svg, float right ]
+# About markless.el
+This package implements a major-mode for "Markless"(https://shirakumo.github.io/markless) documents. It performs syntax highlighting, and adds minimal editing support.
+
+Markless.el can be installed from "MELPA"(http://melpa.org/#/getting-started). Once MELPA is set up, you should be able to enter ``M-x package-install markless RET`` to install it. From there on, files with the ``.mess`` ending should be automatically opened in markless-mode.
