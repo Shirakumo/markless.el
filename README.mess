@@ -2,4 +2,11 @@
 # About markless.el
 This package implements a major-mode for "Markless"(https://shirakumo.github.io/markless) documents. It performs syntax highlighting, and adds minimal editing support.
 
-Markless.el can be installed from "MELPA"(http://melpa.org/#/getting-started). Once MELPA is set up, you should be able to enter ``M-x package-install markless RET`` to install it. From there on, files with the ``.mess`` ending should be automatically opened in markless-mode.
+Markless.el can be installed from "MELPA"(http://melpa.org/#/getting-started). Once MELPA is set up, you should be able to enter ``M-x package-install markless RET`` to install it. From there on, files with the ``.mess`` ending should be automatically opened in markless-mode. To make sure this persists across restarts, add the following to your ``.emacs`` configuration:
+
+:: elisp
+(autoload 'markless-mode "markless" "" t nil)
+(add-to-list 'auto-mode-alist '("\\.mess\\'" . markless-mode))
+::
+
+Markless.el supports a few customisations as well, which you can easily change with ``M-x customize-group markless``.
