@@ -223,7 +223,7 @@ Marks PRE and POST as markup and the content with PROP."
 (cl-defun markless-header-scale-factor (depth)
   "Return the relative font height scaling factor for a header of DEPTH."
   (+ 1.0 (/ (expt (max 0 (- 6 depth)) 2)
-            20.0)))
+            30.0)))
 
 (cl-defun markless-match-block (end)
   "Markup block directives until the end of the line or `point-max'."
