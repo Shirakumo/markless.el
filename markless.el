@@ -385,6 +385,7 @@ Marks PRE and POST as markup and the content with PROP."
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.mess\\'" . markless-mode))
+(add-to-list 'auto-mode-alist '("\\.spess\\'" . markless-mode))
 
 (provide 'markless)
 
