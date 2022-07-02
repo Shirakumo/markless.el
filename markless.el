@@ -36,7 +36,7 @@
 
 (defvar flyspell-generic-check-word-predicate)
 
-(defconst markless-url-regex "[[:alpha:]][[:alnum:]+\\-.]*://[[:alnum:]$\\-_.+!*'()&,/:;=?@%#\\\\]+"
+(defconst markless-url-regex "[[:alpha:]][[:alnum:]+.-]*://[[:alnum:]$_.+!*'()&,/:;=?@%#\\\\-]+"
   "Regex to match URLs as specified by Markless.")
 
 (defvar markless-mode-map
