@@ -184,10 +184,10 @@ Marks PRE and POST as markup and the content with PROP."
        (markless-inline-directive "<-" "->" 'markless-strikethrough-face)
        (markless-inline-directive "v(" ")" '(display ((raise -0.2) (height 0.9))))
        (markless-inline-directive "^(" ")" '(display ((raise +0.2) (height 0.9))))
-       (when (markless-match "\"")
+       (when (or (markless-match "''") (markless-match "\"")) ;; Note: Double quotes are deprecated.
          (let ((start (point)))
            (forward-char)
-           (when (markless-match-inline "\"(")
+           (when (or (markless-match-inline "''(") (markless-match-inline "\"("))
              (markless-mark start (1+ start) 'markless-markup-face)
              (let ((end (point)))
                (re-search-forward ")" (point-at-eol) t)
