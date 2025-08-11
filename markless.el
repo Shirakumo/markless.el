@@ -1,9 +1,9 @@
 ;;; markless.el --- Major mode for Markless documents -*- lexical-binding: t; -*-
 
-;; Copyright (c) 2019 Nicolas Hafner
+;; Copyright (c) 2019 Yukari Hafner
 ;;
-;; Author: Nicolas Hafner <shinmera@tymoon.eu>
-;; URL: http://github.com/shirakumo/markless.el/
+;; Author: Yukari Hafner <shinmera@tymoon.eu>
+;; URL: https://shirakumo.org/docs/markless.el/
 ;; Package-Requires: ((emacs "24.4"))
 ;; Version: 1.0
 ;; Keywords: languages, wp
@@ -19,8 +19,8 @@
 ;; documents.  Markless is a new document markup
 ;; standard.  You can find the Markless standard at
 ;;
-;;   https://github.com/shirakumo/Markless
-;;   https://shirakumo.github.io/markless
+;;   https://shirakumo.org/project/Markless
+;;   https://shirakumo.org/docs/markless
 ;;
 ;; This does *not* implement a full Markless parser
 ;; that is compliant with the specification.  It uses
@@ -54,7 +54,7 @@
 (defgroup markless nil
   "Markless settings"
   :group 'text
-  :link '(url-link "https://github.com/shirakumo/markless.el"))
+  :link '(url-link "https://shirakumo.org/project/markless.el"))
 
 (defgroup markless-faces nil
   "Faces used in Markless mode"
